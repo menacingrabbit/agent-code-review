@@ -1,0 +1,26 @@
+name: "Agent Code Review"
+description: "AI-powered PR code review via OpenRouter, posted as a single PR comment."
+author: "your-org"
+inputs:
+  openrouter-api-key:
+    description: "OpenRouter API key."
+    required: true
+  github-token:
+    description: "GitHub token used to fetch the diff and post the comment."
+    required: false
+    default: ${{ github.token }}
+  model:
+    description: "OpenRouter model id."
+    required: false
+    default: "tencent/hy3:free"
+  max-diff-chars:
+    description: "Max diff length sent to the model (truncated beyond this)."
+    required: false
+    default: "60000"
+  prompt-extra:
+    description: "Extra instructions appended to the review prompt."
+    required: false
+    default: ""
+runs:
+  using: "node20"
+  main: "dist/index.js"

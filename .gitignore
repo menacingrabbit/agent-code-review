@@ -1,0 +1,7 @@
+# Keep secrets/config out of the repo (.claude/settings.json holds an API key)
+.claude/
+
+node_modules/
+lib/
+*.log
+.env

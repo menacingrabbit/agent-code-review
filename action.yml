@@ -1,6 +1,6 @@
 name: "Agent Code Review"
 description: "AI-powered PR code review via OpenRouter, posted as a single PR comment."
-author: "your-org"
+author: "menacingrabbit"
 inputs:
   openrouter-api-key:
     description: "OpenRouter API key."

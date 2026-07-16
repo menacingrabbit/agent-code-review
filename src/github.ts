@@ -28,17 +28,58 @@ export async function getPrDiff(
  * Post a comment on a pull request. PR comments are created through the
  * Issues API, using the PR number as the issue number.
  */
-export async function postReviewComment(
+export const REVIEW_MARKER = '<!-- agent-code-review -->';
+
+/**
+ * Find the most recent review comment posted by this action on a PR,
+ * identified by the embedded REVIEW_MARKER. Returns its id and body, or null.
+ */
+export async function findPreviousReviewComment(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  issueNumber: number,
+): Promise<{ id: number; body: string } | null> {
+  const { data: comments } = await octokit.rest.issues.listComments({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    per_page: 100,
+  });
+  for (const comment of [...comments].reverse()) {
+    if (typeof comment.body === 'string' && comment.body.includes(REVIEW_MARKER)) {
+      return { id: comment.id, body: comment.body };
+    }
+  }
+  return null;
+}
+
+/**
+ * Update the existing review comment if one was previously posted (identified by
+ * REVIEW_MARKER), otherwise create a new one. Keeps a single evolving review on the
+ * PR instead of piling up duplicate comments on every push.
+ */
+export async function upsertReviewComment(
   octokit: Octokit,
   owner: string,
   repo: string,
   issueNumber: number,
   body: string,
 ): Promise<void> {
-  await octokit.rest.issues.createComment({
-    owner,
-    repo,
-    issue_number: issueNumber,
-    body,
-  });
+  const prev = await findPreviousReviewComment(octokit, owner, repo, issueNumber);
+  if (prev) {
+    await octokit.rest.issues.updateComment({
+      owner,
+      repo,
+      comment_id: prev.id,
+      body,
+    });
+  } else {
+    await octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      body,
+    });
+  }
 }

@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { getPrDiff, postReviewComment } from './github';
+import { getPrDiff, findPreviousReviewComment, upsertReviewComment, REVIEW_MARKER } from './github';
 import { reviewDiff } from './openrouter';
 
 interface ActionInputs {
@@ -42,6 +42,12 @@ async function run(): Promise<void> {
   const diff = await getPrDiff(octokit, owner, repo, pullNumber);
   core.info(`Diff length: ${diff.length} chars`);
 
+  const prev = await findPreviousReviewComment(octokit, owner, repo, pullNumber);
+  const previousReview = prev ? prev.body.replace(REVIEW_MARKER, '').trim() : '';
+  if (prev) {
+    core.info('Previous review found — providing it as context and updating the existing comment.');
+  }
+
   core.info(`Requesting review from model "${inputs.model}" via OpenRouter...`);
   const review = await reviewDiff({
     apiKey: inputs.openrouterApiKey,
@@ -49,10 +55,17 @@ async function run(): Promise<void> {
     diff,
     maxDiffChars: inputs.maxDiffChars,
     promptExtra: inputs.promptExtra,
+    previousReview,
   });
 
-  await postReviewComment(octokit, owner, repo, pullNumber, review.summary);
-  core.info('Review comment posted.');
+  await upsertReviewComment(
+    octokit,
+    owner,
+    repo,
+    pullNumber,
+    `${REVIEW_MARKER}\n\n${review.summary}`,
+  );
+  core.info('Review comment posted/updated.');
 }
 
 if (require.main === module) {

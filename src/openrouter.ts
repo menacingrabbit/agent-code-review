@@ -8,6 +8,7 @@ export interface ReviewOptions {
   diff: string;
   maxDiffChars: number;
   promptExtra: string;
+  previousReview?: string;
 }
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -21,12 +22,15 @@ Your review should be constructive, specific, and actionable. Focus on:
 Do NOT comment on style nitpicks unless they affect correctness. Assume the reader is the PR author.
 Match the language of the diff's surrounding code and PR for your prose; default to English.
 
+If a previous review is provided in the user message, do NOT repeat findings it already raised; acknowledge fixes the author made in response; focus on remaining or newly introduced issues.
+
 Respond with ONLY a single valid JSON object of the form {"summary": "..."} where "summary" is your full review as Markdown. No extra text, no code fences around the JSON.`;
 
 function buildUserPrompt(
   diff: string,
   maxDiffChars: number,
   promptExtra: string,
+  previousReview?: string,
 ): string {
   let body = diff;
   if (body.length > maxDiffChars) {
@@ -39,6 +43,11 @@ function buildUserPrompt(
   const extra = promptExtra.trim();
   if (extra) {
     prompt += `\n\nAdditional reviewer instructions:\n${extra}`;
+  }
+  if (previousReview && previousReview.trim()) {
+    prompt +=
+      `\n\nPrevious review already posted on this PR (treat as prior context; ` +
+      `do not repeat already-addressed points):\n\n"""\n${previousReview.trim()}\n"""`;
   }
   return prompt;
 }
@@ -68,7 +77,12 @@ function parseReview(raw: string): ReviewResult {
 }
 
 export async function reviewDiff(opts: ReviewOptions): Promise<ReviewResult> {
-  const userContent = buildUserPrompt(opts.diff, opts.maxDiffChars, opts.promptExtra);
+  const userContent = buildUserPrompt(
+    opts.diff,
+    opts.maxDiffChars,
+    opts.promptExtra,
+    opts.previousReview,
+  );
 
   const resp = await fetch(OPENROUTER_URL, {
     method: 'POST',

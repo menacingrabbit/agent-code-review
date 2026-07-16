@@ -29928,8 +29928,10 @@ function wrappy (fn, cb) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.REVIEW_MARKER = void 0;
 exports.getPrDiff = getPrDiff;
-exports.postReviewComment = postReviewComment;
+exports.findPreviousReviewComment = findPreviousReviewComment;
+exports.upsertReviewComment = upsertReviewComment;
 /**
  * Fetch the full raw diff of a pull request.
  * Uses the `application/vnd.github.v3.diff` media type so the whole diff is
@@ -29950,13 +29952,48 @@ async function getPrDiff(octokit, owner, repo, pullNumber) {
  * Post a comment on a pull request. PR comments are created through the
  * Issues API, using the PR number as the issue number.
  */
-async function postReviewComment(octokit, owner, repo, issueNumber, body) {
-    await octokit.rest.issues.createComment({
+exports.REVIEW_MARKER = '<!-- agent-code-review -->';
+/**
+ * Find the most recent review comment posted by this action on a PR,
+ * identified by the embedded REVIEW_MARKER. Returns its id and body, or null.
+ */
+async function findPreviousReviewComment(octokit, owner, repo, issueNumber) {
+    const { data: comments } = await octokit.rest.issues.listComments({
         owner,
         repo,
         issue_number: issueNumber,
-        body,
+        per_page: 100,
     });
+    for (const comment of [...comments].reverse()) {
+        if (typeof comment.body === 'string' && comment.body.includes(exports.REVIEW_MARKER)) {
+            return { id: comment.id, body: comment.body };
+        }
+    }
+    return null;
+}
+/**
+ * Update the existing review comment if one was previously posted (identified by
+ * REVIEW_MARKER), otherwise create a new one. Keeps a single evolving review on the
+ * PR instead of piling up duplicate comments on every push.
+ */
+async function upsertReviewComment(octokit, owner, repo, issueNumber, body) {
+    const prev = await findPreviousReviewComment(octokit, owner, repo, issueNumber);
+    if (prev) {
+        await octokit.rest.issues.updateComment({
+            owner,
+            repo,
+            comment_id: prev.id,
+            body,
+        });
+    }
+    else {
+        await octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: issueNumber,
+            body,
+        });
+    }
 }
 
 
@@ -30031,6 +30068,11 @@ async function run() {
     core.info(`Fetching diff for ${owner}/${repo}#${pullNumber}...`);
     const diff = await (0, github_1.getPrDiff)(octokit, owner, repo, pullNumber);
     core.info(`Diff length: ${diff.length} chars`);
+    const prev = await (0, github_1.findPreviousReviewComment)(octokit, owner, repo, pullNumber);
+    const previousReview = prev ? prev.body.replace(github_1.REVIEW_MARKER, '').trim() : '';
+    if (prev) {
+        core.info('Previous review found — providing it as context and updating the existing comment.');
+    }
     core.info(`Requesting review from model "${inputs.model}" via OpenRouter...`);
     const review = await (0, openrouter_1.reviewDiff)({
         apiKey: inputs.openrouterApiKey,
@@ -30038,9 +30080,10 @@ async function run() {
         diff,
         maxDiffChars: inputs.maxDiffChars,
         promptExtra: inputs.promptExtra,
+        previousReview,
     });
-    await (0, github_1.postReviewComment)(octokit, owner, repo, pullNumber, review.summary);
-    core.info('Review comment posted.');
+    await (0, github_1.upsertReviewComment)(octokit, owner, repo, pullNumber, `${github_1.REVIEW_MARKER}\n\n${review.summary}`);
+    core.info('Review comment posted/updated.');
 }
 if (require.main === require.cache[eval('__filename')]) {
     run().catch((err) => {
@@ -30068,8 +30111,10 @@ Your review should be constructive, specific, and actionable. Focus on:
 Do NOT comment on style nitpicks unless they affect correctness. Assume the reader is the PR author.
 Match the language of the diff's surrounding code and PR for your prose; default to English.
 
+If a previous review is provided in the user message, do NOT repeat findings it already raised; acknowledge fixes the author made in response; focus on remaining or newly introduced issues.
+
 Respond with ONLY a single valid JSON object of the form {"summary": "..."} where "summary" is your full review as Markdown. No extra text, no code fences around the JSON.`;
-function buildUserPrompt(diff, maxDiffChars, promptExtra) {
+function buildUserPrompt(diff, maxDiffChars, promptExtra, previousReview) {
     let body = diff;
     if (body.length > maxDiffChars) {
         body =
@@ -30080,6 +30125,11 @@ function buildUserPrompt(diff, maxDiffChars, promptExtra) {
     const extra = promptExtra.trim();
     if (extra) {
         prompt += `\n\nAdditional reviewer instructions:\n${extra}`;
+    }
+    if (previousReview && previousReview.trim()) {
+        prompt +=
+            `\n\nPrevious review already posted on this PR (treat as prior context; ` +
+                `do not repeat already-addressed points):\n\n"""\n${previousReview.trim()}\n"""`;
     }
     return prompt;
 }
@@ -30107,7 +30157,7 @@ function parseReview(raw) {
     return { summary: raw };
 }
 async function reviewDiff(opts) {
-    const userContent = buildUserPrompt(opts.diff, opts.maxDiffChars, opts.promptExtra);
+    const userContent = buildUserPrompt(opts.diff, opts.maxDiffChars, opts.promptExtra, opts.previousReview);
     const resp = await fetch(OPENROUTER_URL, {
         method: 'POST',
         headers: {

@@ -29931,7 +29931,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.REVIEW_MARKER = void 0;
 exports.getPrDiff = getPrDiff;
 exports.findPreviousReviewComment = findPreviousReviewComment;
-exports.upsertReviewComment = upsertReviewComment;
+exports.postReviewComment = postReviewComment;
 /**
  * Fetch the full raw diff of a pull request.
  * Uses the `application/vnd.github.v3.diff` media type so the whole diff is
@@ -29972,28 +29972,19 @@ async function findPreviousReviewComment(octokit, owner, repo, issueNumber) {
     return null;
 }
 /**
- * Update the existing review comment if one was previously posted (identified by
- * REVIEW_MARKER), otherwise create a new one. Keeps a single evolving review on the
- * PR instead of piling up duplicate comments on every push.
+ * Post a NEW review comment on a pull request. Every action run creates a fresh
+ * comment rather than editing the previous one, so the full review history of the
+ * PR is preserved. The previous review is still passed as context (via
+ * findPreviousReviewComment in index.ts) so the model can acknowledge fixes
+ * without repeating already-raised findings.
  */
-async function upsertReviewComment(octokit, owner, repo, issueNumber, body) {
-    const prev = await findPreviousReviewComment(octokit, owner, repo, issueNumber);
-    if (prev) {
-        await octokit.rest.issues.updateComment({
-            owner,
-            repo,
-            comment_id: prev.id,
-            body,
-        });
-    }
-    else {
-        await octokit.rest.issues.createComment({
-            owner,
-            repo,
-            issue_number: issueNumber,
-            body,
-        });
-    }
+async function postReviewComment(octokit, owner, repo, issueNumber, body) {
+    await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        body,
+    });
 }
 
 
@@ -30082,8 +30073,8 @@ async function run() {
         promptExtra: inputs.promptExtra,
         previousReview,
     });
-    await (0, github_1.upsertReviewComment)(octokit, owner, repo, pullNumber, `${github_1.REVIEW_MARKER}\n\n${review.summary}`);
-    core.info('Review comment posted/updated.');
+    await (0, github_1.postReviewComment)(octokit, owner, repo, pullNumber, `${github_1.REVIEW_MARKER}\n\n${review.summary}`);
+    core.info('Review comment posted.');
 }
 if (require.main === require.cache[eval('__filename')]) {
     run().catch((err) => {

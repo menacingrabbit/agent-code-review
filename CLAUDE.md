@@ -8,14 +8,14 @@ Wiederverwendbare GitHub Action: AI-Code-Review eines PR-Diffs via OpenRouter, g
 
 ## Struktur (`src/`)
 - `index.ts` — Orchestrierung: Inputs lesen, Octokit+Context, Diff holen, Review holen, Kommentar posten.
-- `github.ts` — `getPrDiff` (roher Diff via `mediaType: diff`); `findPreviousReviewComment` + `upsertReviewComment` (marker-basiert: ein einzelner, bei Push aktualisierter Kommentar statt Kommentar-Flut).
+- `github.ts` — `getPrDiff` (roher Diff via `mediaType: diff`); `findPreviousReviewComment` (marker-basiert: findet den letzten eigenen Kommentar als Kontext) + `postReviewComment` (legt bei jedem Lauf einen **neuen** Kommentar an — volle History, kein Überschreiben).
 - `openrouter.ts` — `reviewDiff`: baut Prompt, ruft `https://openrouter.ai/api/v1/chat/completions`, parst JSON (`{summary}`), defensiver Fallback bei Parse-Fehler.
 
 ## Wichtigste Konventionen
 - **`dist/` muss nach jeder Änderung an `src/` neu gebaut UND committet werden** (`npm run build`). Die Action läuft aus `dist/`, nicht aus `src/`.
 - Build/Verifikation: `npm run typecheck` (sauber) → `npm run build`.
 - Default-Modell `tencent/hy3:free`, überschreibbar via Input `model`.
-- Kommentar-Stil: ein einzelner, sich weiterentwickelnder PR-Kommentar (kein Kommentar-Flut bei jedem Push).
+- Kommentar-Stil: bei jedem Lauf ein **neuer** PR-Kommentar; der letzte wird bei neuen Commits nicht überschrieben (volle History). Prior-Review wird als Kontext mitgegeben.
 - Prompt liegt in `src/openrouter.ts`: `SYSTEM_PROMPT` (fest) + `buildUserPrompt()` (Diff + `prompt-extra`).
 - `action.yml` (`node20`, Inputs, `main: dist/index.js`) ist die Action-Definition.
 

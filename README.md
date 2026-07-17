@@ -2,13 +2,14 @@
 
 Eine **eigenständige, wiederverwendbare GitHub Action** (dieses Repo ist **public**),
 die einen PR-Diff holt, ihn an ein LLM via [OpenRouter](https://openrouter.ai) schickt
-und die Review als **einen einzelnen, bei erneuten Pushs aktualisierten Zusammenfassungs-Kommentar**
-unter den PR postet. Frühere Reviews werden dabei als Kontext einbezogen, sodass bereits
-behandelte Punkte nicht wiederholt und Korrekturen als erledigt anerkannt werden.
+und die Review bei jedem Lauf als **neuen Zusammenfassungs-Kommentar** unter den PR postet,
+sodass die vollständige Review-History erhalten bleibt. Frühere Reviews werden dabei als
+Kontext einbezogen, sodass bereits behandelte Punkte nicht wiederholt und Korrekturen als
+erledigt anerkannt werden.
 
 - Stack: TypeScript / Node.js (Node 20), `@actions/core` + `@actions/github` (Octokit), gebündelt mit `@vercel/ncc`.
 - Default-Modell: `tencent/hy3:free` (kostenlos), per Input `model` überschreibbar (z. B. `anthropic/claude-3.5-sonnet`).
-- Kommentar-Stil: ein einzelner, sich weiterentwickelnder PR-Kommentar (kein Kommentar-Flut bei jedem Push; keine Inline-/Zeilen-Kommentare).
+- Kommentar-Stil: bei jedem Lauf ein **neuer** PR-Kommentar (volle History bleibt erhalten; keine Inline-/Zeilen-Kommentare). Der letzte Kommentar wird bei neuen Commits nicht überschrieben.
 - Konsumiert wird sie normal über `uses: menacingrabbit/agent-code-review@main` — kein Token/Checkout nötig.
 
 ## Nutzung im Ziel-Repo

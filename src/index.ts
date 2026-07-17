@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { getPrDiff, findPreviousReviewComment, upsertReviewComment, REVIEW_MARKER } from './github';
+import { getPrDiff, findPreviousReviewComment, postReviewComment, REVIEW_MARKER } from './github';
 import { reviewDiff } from './openrouter';
 
 interface ActionInputs {
@@ -58,14 +58,14 @@ async function run(): Promise<void> {
     previousReview,
   });
 
-  await upsertReviewComment(
+  await postReviewComment(
     octokit,
     owner,
     repo,
     pullNumber,
     `${REVIEW_MARKER}\n\n${review.summary}`,
   );
-  core.info('Review comment posted/updated.');
+  core.info('Review comment posted.');
 }
 
 if (require.main === module) {

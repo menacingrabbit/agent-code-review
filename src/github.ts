@@ -55,31 +55,23 @@ export async function findPreviousReviewComment(
 }
 
 /**
- * Update the existing review comment if one was previously posted (identified by
- * REVIEW_MARKER), otherwise create a new one. Keeps a single evolving review on the
- * PR instead of piling up duplicate comments on every push.
+ * Post a NEW review comment on a pull request. Every action run creates a fresh
+ * comment rather than editing the previous one, so the full review history of the
+ * PR is preserved. The previous review is still passed as context (via
+ * findPreviousReviewComment in index.ts) so the model can acknowledge fixes
+ * without repeating already-raised findings.
  */
-export async function upsertReviewComment(
+export async function postReviewComment(
   octokit: Octokit,
   owner: string,
   repo: string,
   issueNumber: number,
   body: string,
 ): Promise<void> {
-  const prev = await findPreviousReviewComment(octokit, owner, repo, issueNumber);
-  if (prev) {
-    await octokit.rest.issues.updateComment({
-      owner,
-      repo,
-      comment_id: prev.id,
-      body,
-    });
-  } else {
-    await octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: issueNumber,
-      body,
-    });
-  }
+  await octokit.rest.issues.createComment({
+    owner,
+    repo,
+    issue_number: issueNumber,
+    body,
+  });
 }
